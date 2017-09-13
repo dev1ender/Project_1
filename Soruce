@@ -1,0 +1,30 @@
+
+--load data into the pig 
+load_data = LOAD '/user/flume/tweets' USING com.twitter.elephantbird.pig.load.JsonLoader('-nestedLoad') AS myMap;
+
+
+--extract the data
+extract_details = FOREACH load_tweets GENERATE myMap#'id' as id,myMap#'text' as text;
+
+--tokenize the data
+tokens = FOREACH extract_details generate id,text,FLATTEN(TOKENIZE(text)) As word;
+
+-- adding thte dic into the pig
+dictionary = load '/home/acadgild/Assignments/Project-1/AFINN.txt' using PigStorage('\t') AS(word:chararray,rating:int);
+
+
+--joing the two relatioin
+word_rating = join tokens by word left outer, dictionary by word using 'replicated';
+
+-- generating the data
+rating = foreach word_rating generate tokens::id as id,tokens::text as text,dictionary::rating as rate;
+
+--grouping the data 
+word_group = group rating by (id,text);
+
+
+-- averaging the rating
+avg_rate = FOREACH word_group generate group , AVG (rating.rate) as tweet_rating;
+
+-- filtering the positive tweets
+positive_tweets = FILTER avg_rate by tweet_rating>=0;
